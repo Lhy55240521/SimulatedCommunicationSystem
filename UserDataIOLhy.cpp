@@ -1,254 +1,270 @@
 #include "UserDataIOLhy.h"
-#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <vector>
-#include <string>
 
-// �����������ָ��ַ���
-std::vector<std::string> split(const std::string& s, char delimiter) {
+#include "QQGroupLhy.h"
+#include "QQUserLhy.h"
+#include "WeChatGroupLhy.h"
+#include "WeChatUserLhy.h"
+
+#include <fstream>
+#include <iostream>
+#include <sstream>
+
+namespace {
+
+std::vector<std::string> split(const std::string& text, char delimiter) {
     std::vector<std::string> tokens;
-    std::string token;
-    std::istringstream tokenStream(s);
-    while (std::getline(tokenStream, token, delimiter)) {
-        tokens.push_back(token);
+    std::stringstream ss(text);
+    std::string item;
+    while (std::getline(ss, item, delimiter)) {
+        if (!item.empty()) {
+            tokens.push_back(item);
+        }
     }
     return tokens;
 }
 
-// �����û�����
-std::vector<BaseUserLhy*> UserDataIOLhy::loadUsers(const std::string& filename) {
-    std::vector<BaseUserLhy*> users;
-    std::ifstream file(filename);
-
-    if (!file.is_open()) {
-        std::cout << "[���ݼ���] �û��ļ������ڣ����������ļ���" << filename << std::endl;
-        return users;
+std::string join(const std::vector<std::string>& items, char delimiter) {
+    std::ostringstream os;
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (i > 0) {
+            os << delimiter;
+        }
+        os << items[i];
     }
-
-    std::string line;
-    // ������ͷ
-    std::getline(file, line);
-
-    while (std::getline(file, line)) {
-        std::vector<std::string> data = split(line, '|');
-        if (data.size() < 7) continue; // ���ݲ�����������
-
-        std::string type = data[0];
-        std::string id = data[1];
-        std::string nickname = data[2];
-        std::string password = data[3];
-        std::string birthDate = data[4];
-        int tAge = std::stoi(data[5]);
-        std::string location = data[6];
-        std::string bindId = (data.size() > 7) ? data[7] : "";
-
-        // ���������б�
-        std::vector<std::string> friends;
-        if (data.size() > 8) {
-            std::vector<std::string> friendList = split(data[8], ',');
-            for (const auto& f : friendList) {
-                if (!f.empty()) friends.push_back(f);
-            }
-        }
-
-        BaseUserLhy* user = nullptr;
-        if (type == "QQ") {
-            user = new QQUserLhy(id, nickname, birthDate, tAge, location, bindId);
-            user->changePassword("123", password); // 设置密码
-        }
-        else if (type == "WECHAT") {
-            user = new WeChatUserLhy(id, nickname, birthDate, tAge, location, bindId);
-            user->changePassword("123", password); // 设置密码
-        }
-
-        if (user) {
-            // ���Ӻ���
-            for (const auto& f : friends) {
-                user->addFriend(f);
-            }
-            users.push_back(user);
-        }
-    }
-
-    file.close();
-    std::cout << "[���ݼ���] �ɹ����� " << users.size() << " ���û�" << std::endl;
-    return users;
+    return os.str();
 }
 
-// �����û�����
-void UserDataIOLhy::saveUsers(const std::string& filename, const std::vector<BaseUserLhy*>& users) {
-    std::ofstream file(filename);
+} // namespace
 
-    if (!file.is_open()) {
-        std::cerr << "[���ݱ���] �޷����û��ļ���" << filename << std::endl;
+void UserDataIOLhy::loadUsers(const std::string& filename,
+                              std::unordered_map<std::string, std::unique_ptr<BaseUserLhy>>& users) {
+    std::ifstream fin(filename);
+    if (!fin.is_open()) {
+        std::cout << "[DataIO] user file not found: " << filename << " (using defaults)" << std::endl;
         return;
     }
 
-    // д���ͷ
-    file << "����|ID|�ǳ�|����|����|T��|���ڵ�|��ID|�����б�\n";
-
-    for (const auto& user : users) {
-        if (!user) continue;
-
-        // �ж��û�����
-        std::string type = "UNKNOWN";
-        std::string bindId = "";
-
-        if (dynamic_cast<QQUserLhy*>(user)) {
-            type = "QQ";
-            bindId = dynamic_cast<QQUserLhy*>(user)->getBindWeChatId();
-        }
-        else if (dynamic_cast<WeChatUserLhy*>(user)) {
-            type = "WECHAT";
-            bindId = dynamic_cast<WeChatUserLhy*>(user)->getBindQQId();
-        }
-
-        // ƴ�Ӻ����б�
-        std::string friends;
-        auto friendIds = user->getFriendIds();
-        for (size_t i = 0; i < friendIds.size(); ++i) {
-            if (i > 0) friends += ",";
-            friends += friendIds[i];
-        }
-
-        // д���û�����
-        file << type << "|"
-            << user->getId() << "|"
-            << user->getNickname() << "|"
-            << user->getPassword() << "|"  // ��Ҫ��BaseUserLhy������getPassword����
-            << user->getBirthDate() << "|"
-            << user->getTAge() << "|"
-            << user->getLocation() << "|"
-            << bindId << "|"
-            << friends << "\n";
-    }
-
-    file.close();
-    std::cout << "[���ݱ���] �ɹ����� " << users.size() << " ���û��� " << filename << std::endl;
-}
-
-// ����Ⱥ����
-std::vector<BaseGroupLhy*> UserDataIOLhy::loadGroups(const std::string& filename,
-    const std::vector<BaseUserLhy*>& allUsers) {
-    std::vector<BaseGroupLhy*> groups;
-    std::ifstream file(filename);
-
-    if (!file.is_open()) {
-        std::cout << "[���ݼ���] Ⱥ�ļ������ڣ����������ļ���" << filename << std::endl;
-        return groups;
-    }
-
     std::string line;
-    // ������ͷ
-    std::getline(file, line);
+    while (std::getline(fin, line)) {
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        auto fields = split(line, '|');
+        if (fields.size() < 8 || (fields[0] != "QQ" && fields[0] != "WECHAT")) {
+            continue;
+        }
 
-    while (std::getline(file, line)) {
-        std::vector<std::string> data = split(line, '|');
-        if (data.size() < 5) continue; // ���ݲ�����������
+        const std::string& type = fields[0];
+        const std::string& id = fields[1];
+        const std::string& nickname = fields[2];
+        const std::string& password = fields[3];
+        const std::string& birth = fields[4];
+        int tAge = std::stoi(fields[5]);
+        const std::string& location = fields[6];
+        const std::string& bindId = fields[7];
 
-        std::string type = data[0];
-        std::string groupId = data[1];
-        std::string groupName = data[2];
-        std::string ownerId = data[3];
+        std::unique_ptr<BaseUserLhy> user;
+        if (type == "QQ") {
+            user = std::make_unique<QQUserLhy>(id, nickname, birth, tAge, location, password, bindId);
+        } else if (type == "WECHAT") {
+            user = std::make_unique<WeChatUserLhy>(id, nickname, birth, tAge, location, password, bindId);
+        } else {
+            continue;
+        }
 
-        // ����Ⱥ��
-        BaseUserLhy* owner = nullptr;
-        for (const auto& user : allUsers) {
-            if (user && user->getId() == ownerId) {
-                owner = user;
-                break;
+        if (fields.size() > 8) {
+            for (const auto& service : split(fields[8], ',')) {
+                user->openService(service);
+            }
+        }
+        if (fields.size() > 9) {
+            for (const auto& friendId : split(fields[9], ',')) {
+                user->addFriend(friendId);
+            }
+        }
+        if (fields.size() > 10) {
+            for (const auto& remarkEntry : split(fields[10], ',')) {
+                auto pos = remarkEntry.find(':');
+                if (pos != std::string::npos) {
+                    user->setFriendRemark(remarkEntry.substr(0, pos), remarkEntry.substr(pos + 1));
+                }
+            }
+        }
+        if (fields.size() > 11) {
+            for (const auto& groupId : split(fields[11], ',')) {
+                user->addGroupId(groupId);
             }
         }
 
-        if (!owner) continue;
+        users[id] = std::move(user);
+    }
 
-        // ����Ⱥ��Ա
-        std::vector<BaseUserLhy*> members;
-        std::vector<std::string> memberIds = split(data[4], ',');
-        for (const auto& id : memberIds) {
-            for (const auto& user : allUsers) {
-                if (user && user->getId() == id) {
-                    members.push_back(user);
-                    break;
+    std::cout << "[DataIO] loaded " << users.size() << " users" << std::endl;
+}
+
+void UserDataIOLhy::saveUsers(const std::string& filename,
+                              const std::unordered_map<std::string, std::unique_ptr<BaseUserLhy>>& users) {
+    std::ofstream fout(filename);
+    if (!fout.is_open()) {
+        std::cerr << "[DataIO] cannot open user file for write: " << filename << std::endl;
+        return;
+    }
+
+    for (const auto& pair : users) {
+        const auto* user = pair.second.get();
+        if (!user) {
+            continue;
+        }
+
+        std::string type = "GENERIC";
+        std::string bindId;
+        if (const auto* qq = dynamic_cast<const QQUserLhy*>(user)) {
+            type = "QQ";
+            bindId = qq->getBindWeChatId();
+        } else if (const auto* wx = dynamic_cast<const WeChatUserLhy*>(user)) {
+            type = "WECHAT";
+            bindId = wx->getBindQQId();
+        }
+
+        std::vector<std::string> services = user->getOpenedServices();
+        std::vector<std::string> friends = user->getFriendIds();
+
+        std::vector<std::string> remarks;
+        for (const auto& remark : user->getFriendRemarks()) {
+            remarks.push_back(remark.first + ":" + remark.second);
+        }
+
+        std::vector<std::string> groups = user->getGroupIds();
+
+        fout << type << '|'
+             << user->getId() << '|'
+             << user->getNickname() << '|'
+             << user->getPassword() << '|'
+             << user->getBirthDate() << '|'
+             << user->getTAge() << '|'
+             << user->getLocation() << '|'
+             << bindId << '|'
+             << join(services, ',') << '|'
+             << join(friends, ',') << '|'
+             << join(remarks, ',') << '|'
+             << join(groups, ',') << '\n';
+    }
+
+    std::cout << "[DataIO] saved " << users.size() << " users" << std::endl;
+}
+
+void UserDataIOLhy::loadGroups(const std::string& filename,
+                               const std::unordered_map<std::string, std::unique_ptr<BaseUserLhy>>& users,
+                               std::unordered_map<std::string, std::unique_ptr<BaseGroupLhy>>& groups) {
+    std::ifstream fin(filename);
+    if (!fin.is_open()) {
+        std::cout << "[DataIO] group file not found: " << filename << " (using defaults)" << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(fin, line)) {
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        auto fields = split(line, '|');
+        if (fields.size() < 5 || (fields[0] != "QQ" && fields[0] != "WECHAT")) {
+            continue;
+        }
+
+        const std::string& type = fields[0];
+        const std::string& id = fields[1];
+        const std::string& name = fields[2];
+        const std::string& ownerId = fields[3];
+
+        auto ownerIt = users.find(ownerId);
+        if (ownerIt == users.end()) {
+            continue;
+        }
+        BaseUserLhy* owner = ownerIt->second.get();
+
+        std::unique_ptr<BaseGroupLhy> group;
+        if (type == "QQ") {
+            group = std::make_unique<QQGroupLhy>(id, name, owner);
+        } else if (type == "WECHAT") {
+            size_t maxMembers = 500;
+            if (fields.size() > 6) {
+                maxMembers = static_cast<size_t>(std::stoul(fields[6]));
+            }
+            group = std::make_unique<WeChatGroupLhy>(id, name, owner, maxMembers);
+            if (fields.size() > 5) {
+                static_cast<WeChatGroupLhy*>(group.get())->setAnnouncement(fields[5]);
+            }
+        } else {
+            continue;
+        }
+
+        if (fields.size() > 4) {
+            for (const auto& memberId : split(fields[4], ',')) {
+                auto it = users.find(memberId);
+                if (it != users.end() && it->second.get() != owner) {
+                    group->restoreMember(it->second.get());
                 }
             }
         }
 
-        // ����Ⱥ�������Ⱥ��Ϣ
-        std::string extraInfo = (data.size() > 5) ? data[5] : "";
-
-        BaseGroupLhy* group = nullptr;
         if (type == "QQ") {
-            group = new QQGroupLhy(groupId, groupName, owner);
-        }
-        else if (type == "WECHAT") {
-            WeChatGroupLhy* wxGroup = new WeChatGroupLhy(groupId, groupName, owner);
-            wxGroup->setAnnouncement(extraInfo); // ����΢��Ⱥ����
-            group = wxGroup;
-        }
-
-        if (group) {
-            // ����Ⱥ��Ա
-            for (const auto& member : members) {
-                if (member && member->getId() != ownerId) { // Ⱥ�����ڹ��캯��������
-                    group->addMember(member);
+            auto* qqGroup = static_cast<QQGroupLhy*>(group.get());
+            if (fields.size() > 5) {
+                for (const auto& adminId : split(fields[5], ',')) {
+                    qqGroup->addAdmin(adminId);
                 }
             }
-            groups.push_back(group);
+            if (fields.size() > 6) {
+                qqGroup->restoreTempSubGroups(split(fields[6], ','));
+            }
         }
+
+        groups[id] = std::move(group);
     }
 
-    file.close();
-    std::cout << "[���ݼ���] �ɹ����� " << groups.size() << " ��Ⱥ��" << std::endl;
-    return groups;
+    std::cout << "[DataIO] loaded " << groups.size() << " groups" << std::endl;
 }
 
-// ����Ⱥ����
-void UserDataIOLhy::saveGroups(const std::string& filename, const std::vector<BaseGroupLhy*>& groups) {
-    std::ofstream file(filename);
-
-    if (!file.is_open()) {
-        std::cerr << "[���ݱ���] �޷���Ⱥ�ļ���" << filename << std::endl;
+void UserDataIOLhy::saveGroups(const std::string& filename,
+                               const std::unordered_map<std::string, std::unique_ptr<BaseGroupLhy>>& groups) {
+    std::ofstream fout(filename);
+    if (!fout.is_open()) {
+        std::cerr << "[DataIO] cannot open group file for write: " << filename << std::endl;
         return;
     }
 
-    // д���ͷ
-    file << "����|ȺID|Ⱥ����|Ⱥ��ID|��Ա�б�|������Ϣ(����/��Ⱥ)\n";
-
-    for (const auto& group : groups) {
-        if (!group) continue;
-
-        // �ж�Ⱥ����
-        std::string type = "UNKNOWN";
-        std::string extraInfo = "";
-
-        if (dynamic_cast<QQGroupLhy*>(group)) {
-            type = "QQ";
-            // ��������������QQȺ���е���Ϣ������Ⱥ��Ϣ
-        }
-        else if (dynamic_cast<WeChatGroupLhy*>(group)) {
-            type = "WECHAT";
-            extraInfo = dynamic_cast<WeChatGroupLhy*>(group)->getAnnouncement();
+    for (const auto& pair : groups) {
+        const auto* group = pair.second.get();
+        if (!group) {
+            continue;
         }
 
-        // ƴ�ӳ�Ա�б�
-        std::string members;
-        auto memberList = group->getMembers();
-        for (size_t i = 0; i < memberList.size(); ++i) {
-            if (i > 0) members += ",";
-            members += memberList[i]->getId();
+        std::vector<std::string> members;
+        for (auto* member : group->getMemberList()) {
+            members.push_back(member->getId());
         }
 
-        // д��Ⱥ����
-        file << type << "|"
-            << group->getGroupId() << "|"
-            << group->getGroupName() << "|"
-            << group->getGroupOwner()->getId() << "|"
-            << members << "|"
-            << extraInfo << "\n";
+        if (auto* qqGroup = dynamic_cast<const QQGroupLhy*>(group)) {
+            std::vector<std::string> admins = qqGroup->getAdminIds();
+            std::vector<std::string> tempSubs = qqGroup->getTempSubGroupIds();
+            fout << "QQ|"
+                 << group->getId() << '|'
+                 << group->getName() << '|'
+                 << group->getOwner()->getId() << '|'
+                 << join(members, ',') << '|'
+                 << join(admins, ',') << '|'
+                 << join(tempSubs, ',') << '\n';
+        } else if (auto* wxGroup = dynamic_cast<const WeChatGroupLhy*>(group)) {
+            fout << "WECHAT|"
+                 << group->getId() << '|'
+                 << group->getName() << '|'
+                 << group->getOwner()->getId() << '|'
+                 << join(members, ',') << '|'
+                 << wxGroup->getAnnouncement() << '|'
+                 << wxGroup->getMaxMembers() << '\n';
+        }
     }
 
-    file.close();
-    std::cout << "[���ݱ���] �ɹ����� " << groups.size() << " ��Ⱥ�ĵ� " << filename << std::endl;
+    std::cout << "[DataIO] saved " << groups.size() << " groups" << std::endl;
 }
