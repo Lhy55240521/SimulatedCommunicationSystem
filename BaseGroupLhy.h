@@ -2,57 +2,44 @@
 #define BASE_GROUP_LHY_H
 
 #include "BaseUserLhy.h"
-#include <map>
-#include <vector>
-#include <string>
 
-// ������ࣺ����Ⱥ�Ĺ�������
+#include <map>
+#include <string>
+#include <vector>
+
 class BaseGroupLhy {
 protected:
-    std::string id;                      // ȺΨһID��Ԥ�裺1001��1002�ȣ�
-    std::string name;                    // Ⱥ����
-    BaseUserLhy* owner;                  // Ⱥ�����û�ָ�룩
-    std::map<std::string, BaseUserLhy*> members;  // ��Ա�б���key���û�ID��
+    std::string id;
+    std::string name;
+    std::string serviceType;
+    BaseUserLhy* owner;
+    std::map<std::string, BaseUserLhy*> members;
+
+    bool addMemberRecord(BaseUserLhy* user);
+    bool removeMemberRecord(const std::string& userId);
 
 public:
-    // ���캯����Ⱥ��Ĭ�ϼ���Ⱥ��
-    BaseGroupLhy(std::string id, std::string name, BaseUserLhy* owner)
-        : id(id), name(name), owner(owner) {
-        if (owner != nullptr) {
-            members[owner->getId()] = owner;
-            owner->addGroupId(id);
-        }
-    }
+    BaseGroupLhy(const std::string& groupId,
+                 const std::string& groupName,
+                 const std::string& serviceType,
+                 BaseUserLhy* owner);
+    virtual ~BaseGroupLhy() = default;
 
-    // ������������
-    virtual ~BaseGroupLhy() = 0;
+    const std::string& getId() const { return id; }
+    const std::string& getName() const { return name; }
+    const std::string& getServiceType() const { return serviceType; }
+    BaseUserLhy* getOwner() const { return owner; }
+    std::vector<BaseUserLhy*> getMemberList() const;
+    bool isMember(const std::string& userId) const;
+    size_t memberCount() const { return members.size(); }
 
-    // ͨ��Get�ӿ�
-    std::string getGroupId() const { return id; }
-    std::string getGroupName() const { return name; }
-    BaseUserLhy* getGroupOwner() const { return owner; }
-    std::vector<BaseUserLhy*> getMembers() const {
-        std::vector<BaseUserLhy*> memberList;
-        for (const auto& pair : members) {
-            memberList.push_back(pair.second);
-        }
-        return memberList;
-    }
-    int getMemberCount() const { return members.size(); }
+    bool restoreMember(BaseUserLhy* user);
 
-    // Ⱥ��������ӿڣ�������컯ʵ�֣�
-    virtual bool addMember(BaseUserLhy* user) = 0;       // ����Ⱥ
-    virtual bool deleteMember(std::string userId) = 0;   // �Ƴ�Ⱥ��Ա
-    virtual std::vector<BaseUserLhy*> searchMember(std::string keyword = "") = 0;  // ���ҳ�Ա
-    virtual bool isTempGroupAllowed() const = 0;         // �Ƿ�������ʱ������
-
-    // ͨ�ýӿڣ��ж��Ƿ�ΪȺ��Ա
-    bool isMember(std::string userId) const {
-        return members.find(userId) != members.end();
-    }
+    virtual bool addMember(BaseUserLhy* user) = 0;
+    virtual bool removeMember(const std::string& userId, const std::string& actorId) = 0;
+    virtual std::vector<BaseUserLhy*> searchMembers(const std::string& keyword) const;
+    virtual bool supportsTempSubGroup() const = 0;
+    virtual void showFeatureSummary() const = 0;
 };
-
-// ������������ʵ��
-inline BaseGroupLhy::~BaseGroupLhy() = default;
 
 #endif // BASE_GROUP_LHY_H

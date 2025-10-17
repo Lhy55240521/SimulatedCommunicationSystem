@@ -1,29 +1,27 @@
 #ifndef USERDATAIOLHY_H
 #define USERDATAIOLHY_H
 
-#include <vector>
+#include <memory>
 #include <string>
-#include "BaseUserLhy.h"
+#include <unordered_map>
+
 #include "BaseGroupLhy.h"
-#include "QQUserLhy.h"
-#include "WeChatUserLhy.h"
-#include "QQGroupLhy.h"
-#include "WeChatGroupLhy.h"
+#include "BaseUserLhy.h"
 
 class UserDataIOLhy {
 public:
-    // 从文件加载用户数据
-    static std::vector<BaseUserLhy*> loadUsers(const std::string& filename);
+    static void loadUsers(const std::string& filename,
+                          std::unordered_map<std::string, std::unique_ptr<BaseUserLhy>>& users);
 
-    // 保存用户数据到文件
-    static void saveUsers(const std::string& filename, const std::vector<BaseUserLhy*>& users);
+    static void saveUsers(const std::string& filename,
+                          const std::unordered_map<std::string, std::unique_ptr<BaseUserLhy>>& users);
 
-    // 从文件加载群数据
-    static std::vector<BaseGroupLhy*> loadGroups(const std::string& filename,
-        const std::vector<BaseUserLhy*>& allUsers);
+    static void loadGroups(const std::string& filename,
+                           const std::unordered_map<std::string, std::unique_ptr<BaseUserLhy>>& users,
+                           std::unordered_map<std::string, std::unique_ptr<BaseGroupLhy>>& groups);
 
-    // 保存群数据到文件
-    static void saveGroups(const std::string& filename, const std::vector<BaseGroupLhy*>& groups);
+    static void saveGroups(const std::string& filename,
+                           const std::unordered_map<std::string, std::unique_ptr<BaseGroupLhy>>& groups);
 };
 
 #endif // USERDATAIOLHY_H

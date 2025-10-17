@@ -1,42 +1,86 @@
 #include "BaseServiceLhy.h"
 #include "QQServiceLhy.h"
 #include "WeChatServiceLhy.h"
-#include <iostream>
+
 #include <algorithm>
-#include <cctype>  // 用于toupper（忽略大小写）
+#include <cctype>
+#include <iostream>
+#include <sstream>
 
+std::unordered_map<std::string, std::vector<BaseServiceLhy*>> BaseServiceLhy::userServices;
 
-std::vector<BaseServiceLhy*> BaseServiceLhy::allServices;
-
-
-// 工厂方法：创建指定类型的服务
-BaseServiceLhy* BaseServiceLhy::createService(std::string serviceType, BaseUserLhy* user) {
-    if (user == nullptr) {
-        std::cout << "[服务工厂] 创建失败：用户对象为空" << std::endl;
-        return nullptr;
-    }
-
-    // 忽略大小写（支持"qq"/"QQ"/"wx"/"WeChat"等输入）
-    for (auto& c : serviceType) {
-        c = toupper(c);
-    }
-
-    if (serviceType == "QQ") {
-        return new QQServiceLhy(user);
-    }
-    else if (serviceType == "WECHAT" || serviceType == "WX") {
-        return new WeChatServiceLhy(user);
-    }
-    else {
-        std::cout << "[服务工厂] 创建失败：不支持的服务类型：" << serviceType << "（仅支持QQ/WeChat）" << std::endl;
-        return nullptr;
+BaseServiceLhy::BaseServiceLhy(BaseUserLhy* userPtr, const std::string& type)
+    : user(userPtr), loggedIn(false), serviceType(type) {
+    if (user) {
+        userServices[user->getId()].push_back(this);
     }
 }
 
-// 基类纯虚析构函数实现（从服务列表移除当前实例）
 BaseServiceLhy::~BaseServiceLhy() {
-    auto it = std::find(allServices.begin(), allServices.end(), this);
-    if (it != allServices.end()) {
-        allServices.erase(it);
+    if (!user) {
+        return;
     }
+    auto& list = userServices[user->getId()];
+    list.erase(std::remove(list.begin(), list.end(), this), list.end());
+}
+
+void BaseServiceLhy::finishLogin() {
+    if (!user) {
+        return;
+    }
+    loggedIn = true;
+    user->openService(serviceType);
+    syncLoginForUser(user->getId(), this);
+}
+
+void BaseServiceLhy::logout() {
+    if (!loggedIn) {
+        return;
+    }
+    loggedIn = false;
+    std::cout << "[" << serviceType << "] " << user->getNickname() << " logged out" << std::endl;
+}
+
+void BaseServiceLhy::syncLoginForUser(const std::string& userId, BaseServiceLhy* origin) {
+    auto it = userServices.find(userId);
+    if (it == userServices.end()) {
+        return;
+    }
+    for (auto* service : it->second) {
+        if (service != origin) {
+            service->setLoggedIn(true);
+            std::cout << "[AutoLogin] " << service->getServiceType() << " logged in automatically" << std::endl;
+        }
+    }
+}
+
+void BaseServiceLhy::registerOpenedServices(BaseUserLhy* user, const std::vector<std::string>& serviceTypes) {
+    if (!user) {
+        return;
+    }
+    for (const auto& type : serviceTypes) {
+        if (!type.empty()) {
+            user->openService(type);
+        }
+    }
+}
+
+std::unique_ptr<BaseServiceLhy> BaseServiceLhy::create(const std::string& rawType, BaseUserLhy* user) {
+    if (!user) {
+        return nullptr;
+    }
+
+    std::string normalized = rawType;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char c) {
+        return static_cast<char>(std::toupper(c));
+    });
+
+    if (normalized == "QQ") {
+        return std::unique_ptr<BaseServiceLhy>(new QQServiceLhy(user));
+    }
+    if (normalized == "WECHAT" || normalized == "WX") {
+        return std::unique_ptr<BaseServiceLhy>(new WeChatServiceLhy(user));
+    }
+    std::cout << "[Factory] Unsupported service type: " << rawType << std::endl;
+    return nullptr;
 }
