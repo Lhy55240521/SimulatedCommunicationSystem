@@ -11,11 +11,10 @@ WeiBoServiceLhy::WeiBoServiceLhy(BaseUserLhy* user)
 
 // 重写登录函数
 bool WeiBoServiceLhy::login(const std::string& credential) {
-    // 验证用户凭证
-    if (getUser() && getUser()->verifyPassword(credential)) {
-        // 检查是否是WeiBoUserLhy类型的用户
-        WeiBoUserLhy* weiBoUser = dynamic_cast<WeiBoUserLhy*>(getUser());
-        if (weiBoUser) {
+    // 验证用户凭证（使用微博服务特定密码）
+    if (getUser() && getUser()->verifyServicePassword("WEIBO", credential)) {
+        // 检查用户是否开通了微博服务（微博与QQ共享ID，所以QQ用户也可以登录微博服务）
+        if (getUser()->hasOpenedService("WEIBO")) {
             std::cout << "[WeiBo] 用户 " << getUser()->getId() << " 登录成功" << std::endl;
             
             // 显示热门话题
@@ -27,6 +26,8 @@ bool WeiBoServiceLhy::login(const std::string& credential) {
             // 调用基类的finishLogin方法
             finishLogin();
             return true;
+        } else {
+            std::cout << "[WeiBo] 用户 " << getUser()->getId() << " 未开通微博服务" << std::endl;
         }
     }
     return false;
