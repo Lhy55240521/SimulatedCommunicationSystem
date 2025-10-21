@@ -105,3 +105,27 @@ void BaseUserLhy::openService(const std::string& serviceType) {
 bool BaseUserLhy::hasOpenedService(const std::string& serviceType) const {
     return openedServices.find(serviceType) != openedServices.end();
 }
+
+void BaseUserLhy::setServicePassword(const std::string& serviceType, const std::string& password) {
+    if (!serviceType.empty() && !password.empty()) {
+        servicePasswords[serviceType] = password;
+    }
+}
+
+const std::string& BaseUserLhy::getServicePassword(const std::string& serviceType) const {
+    static const std::string emptyString;
+    auto it = servicePasswords.find(serviceType);
+    if (it != servicePasswords.end()) {
+        return it->second;
+    }
+    return emptyString;
+}
+
+bool BaseUserLhy::verifyServicePassword(const std::string& serviceType, const std::string& input) const {
+    auto it = servicePasswords.find(serviceType);
+    if (it != servicePasswords.end()) {
+        return it->second == input;
+    }
+    // 如果没有设置服务特定密码，则使用主密码
+    return password == input;
+}

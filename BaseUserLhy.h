@@ -21,6 +21,7 @@ protected:
     std::map<std::string, std::string> friendRemarks;
     std::set<std::string> groupIds;
     std::set<std::string> openedServices;
+    std::map<std::string, std::string> servicePasswords;  // 服务特定密码映射
 
 public:
     BaseUserLhy(const std::string& id,
@@ -88,5 +89,10 @@ public:
     void openService(const std::string& serviceType);
     // 检查是否已开通某项服务
     bool hasOpenedService(const std::string& serviceType) const;
+    
+    // 服务特定密码管理
+    void setServicePassword(const std::string& serviceType, const std::string& password);
+    const std::string& getServicePassword(const std::string& serviceType) const;
+    bool verifyServicePassword(const std::string& serviceType, const std::string& input) const;
 };
 #endif // BASE_USER_LHY_H

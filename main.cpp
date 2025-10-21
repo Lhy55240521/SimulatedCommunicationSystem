@@ -633,7 +633,10 @@ void sessionLoop(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
         std::cout << "2. 群组管理" << std::endl;
         std::cout << "3. 服务开通管理" << std::endl;
         std::cout << "4. 查看账户信息" << std::endl;
-        std::cout << "5. QQ消息模拟" << std::endl;
+        // 只在QQ服务中显示QQ消息模拟功能
+        if (session.activeService && session.activeService->getServiceType() == "QQ") {
+            std::cout << "5. QQ消息模拟" << std::endl;
+        }
         std::cout << "0. 登出" << std::endl;
         std::cout << "请选择：";
 
@@ -660,7 +663,12 @@ void sessionLoop(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
             printUserSummary(session.user);
             break;
         case 5:
-            simulateQQChat(session);
+            // 只在QQ服务中允许QQ消息模拟
+            if (session.activeService && session.activeService->getServiceType() == "QQ") {
+                simulateQQChat(session);
+            } else {
+                std::cout << "[提示] 当前服务不支持此功能" << std::endl;
+            }
             break;
         case 0:
             running = false;
@@ -678,41 +686,30 @@ void sessionLoop(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
 
 void registerUser(PlatformContextLhy& ctx, const std::string& type) {
     std::string id, nickname, birth, location, password;
-    std::cout << "输入ID：";
-    std::cin >> id;
-    if (ctx.users.count(id)) {
-        std::cout << "[提示] ID已存在" << std::endl;
-        return;
-    }
-    std::cout << "输入昵称：";
-    std::cin >> nickname;
-    std::cout << "输入出生日期(YYYY-MM-DD)：";
-    std::cin >> birth;
-    std::cout << "输入所在地：";
-    std::cin >> location;
-    std::cout << "设置密码：";
-    std::cin >> password;
-
-    std::unique_ptr<BaseUserLhy> user;
     std::string normalized = normalizeService(type);
-    if (normalized == "QQ") {
-        std::string bindId;
-        std::cout << "可选绑定微信ID（没有请输入-）：";
-        std::cin >> bindId;
-        user = std::make_unique<QQUserLhy>(id, nickname, birth, location, password, bindId == "-" ? "" : bindId);
-    } else if (normalized == "WECHAT") {
-        std::string bindId;
-        std::cout << "可选绑定QQ ID（没有请输入-）：";
-        std::cin >> bindId;
-        user = std::make_unique<WeChatUserLhy>(id, nickname, birth, location, password, bindId == "-" ? "" : bindId);
-    } else if (normalized == "WEIBO") {
-        // 微博服务必须绑定到已存在的QQ账号
+    
+    if (normalized == "WEIBO") {
+        // 微博注册逻辑：只需要输入QQ账号ID和微博密码
+        std::cout << "输入QQ账号ID：";
+        std::cin >> id;
+        
+        // 检查该ID是否已存在（作为微博用户）
+        if (ctx.users.count(id)) {
+            // 检查是否已经是微博用户
+            auto& existingUser = ctx.users.at(id);
+            if (existingUser->hasOpenedService("WEIBO")) {
+                std::cout << "[提示] 该QQ账号已注册微博服务" << std::endl;
+                return;
+            }
+        }
+        
+        // 检查该ID是否存在且是QQ账号
         if (!ctx.users.count(id)) {
-            std::cout << "[提示] 该ID不存在，请先注册QQ账号" << std::endl;
+            std::cout << "[提示] 该QQ账号不存在，请先注册QQ账号" << std::endl;
             return;
         }
         
-        // 获取已存在的用户
+        // 获取已存在的QQ用户
         auto& existingUser = ctx.users.at(id);
         QQUserLhy* qqUserPtr = dynamic_cast<QQUserLhy*>(existingUser.get());
         if (!qqUserPtr) {
@@ -720,16 +717,88 @@ void registerUser(PlatformContextLhy& ctx, const std::string& type) {
             return;
         }
         
-        // 使用QQ用户的信息创建微博用户（自动填充QQ用户的信息）
-        user = std::make_unique<WeiBoUserLhy>(id, qqUserPtr->getNickname(), qqUserPtr->getBirthDate(), 
-                                             qqUserPtr->getLocation(), password, id);
+        // 只需要输入微博密码
+        std::cout << "设置微博密码：";
+        std::cin >> password;
+        
+        // 为现有的QQ用户开通微博服务（微博与QQ共享ID）
+        existingUser->openService("WEIBO");
+        // 设置微博服务特定密码
+        existingUser->setServicePassword("WEIBO", password);
+        std::cout << "[成功] 微博服务注册完成" << std::endl;
+        
     } else {
-        std::cout << "[提示] 不支持的用户类型" << std::endl;
-        return;
+        // 其他服务的注册逻辑保持不变
+        std::cout << "输入ID：";
+        std::cin >> id;
+        if (ctx.users.count(id)) {
+            std::cout << "[提示] ID已存在" << std::endl;
+            return;
+        }
+        std::cout << "输入昵称：";
+        std::cin >> nickname;
+        std::cout << "输入出生日期(YYYY-MM-DD)：";
+        std::cin >> birth;
+        std::cout << "输入所在地：";
+        std::cin >> location;
+        std::cout << "设置密码：";
+        std::cin >> password;
+
+        std::unique_ptr<BaseUserLhy> user;
+        if (normalized == "QQ") {
+            std::string bindId;
+            std::cout << "可选绑定微信ID（没有请输入-）：";
+            std::cin >> bindId;
+            user = std::make_unique<QQUserLhy>(id, nickname, birth, location, password, bindId == "-" ? "" : bindId);
+        } else if (normalized == "WECHAT") {
+            // 微信注册：通过输入QQ ID和密码来绑定QQ服务
+            std::string bindQQId;
+            std::cout << "输入要绑定的QQ ID（没有请输入-）：";
+            std::cin >> bindQQId;
+            
+            if (bindQQId != "-") {
+                // 检查QQ账号是否存在
+                if (!ctx.users.count(bindQQId)) {
+                    std::cout << "[提示] 该QQ账号不存在，无法绑定" << std::endl;
+                    return;
+                }
+                
+                // 检查该ID是否为QQ账号
+                auto& qqUser = ctx.users.at(bindQQId);
+                QQUserLhy* qqUserPtr = dynamic_cast<QQUserLhy*>(qqUser.get());
+                if (!qqUserPtr) {
+                    std::cout << "[提示] 该ID不是QQ账号，无法绑定" << std::endl;
+                    return;
+                }
+                
+                // 验证QQ密码
+                std::string qqPassword;
+                std::cout << "输入QQ账号密码：";
+                std::cin >> qqPassword;
+                
+                if (!qqUser->verifyPassword(qqPassword)) {
+                    std::cout << "[提示] QQ密码错误，绑定失败" << std::endl;
+                    return;
+                }
+                
+                // 创建微信用户并设置绑定QQ ID
+                user = std::make_unique<WeChatUserLhy>(id, nickname, birth, location, password, bindQQId);
+                
+                // 实现双向绑定：在QQ账号中也绑定微信ID
+                qqUserPtr->setBindWeChatId(id);
+                std::cout << "[成功] 微信与QQ账号双向绑定完成" << std::endl;
+            } else {
+                // 不绑定QQ账号
+                user = std::make_unique<WeChatUserLhy>(id, nickname, birth, location, password, "");
+            }
+        } else {
+            std::cout << "[提示] 不支持的用户类型" << std::endl;
+            return;
+        }
+        user->openService(normalized);
+        ctx.users.emplace(id, std::move(user));
+        std::cout << "[成功] 注册完成" << std::endl;
     }
-    user->openService(normalized);
-    ctx.users.emplace(id, std::move(user));
-    std::cout << "[成功] 注册完成" << std::endl;
 }
 
 void loginFlow(PlatformContextLhy& ctx, const std::string& type) {
