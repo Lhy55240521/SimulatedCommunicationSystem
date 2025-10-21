@@ -706,22 +706,23 @@ void registerUser(PlatformContextLhy& ctx, const std::string& type) {
         std::cin >> bindId;
         user = std::make_unique<WeChatUserLhy>(id, nickname, birth, location, password, bindId == "-" ? "" : bindId);
     } else if (normalized == "WEIBO") {
-        // 检查是否已存在对应的QQ账号
-        if (ctx.users.count(id)) {
-            // 获取已存在的QQ用户
-            auto& qqUser = ctx.users.at(id);
-            QQUserLhy* qqUserPtr = dynamic_cast<QQUserLhy*>(qqUser.get());
-            if (!qqUserPtr) {
-                std::cout << "[提示] 该ID不是QQ账号，无法注册微博服务" << std::endl;
-                return;
-            }
-            
-            // 使用QQ用户的信息创建微博用户
-            user = std::make_unique<WeiBoUserLhy>(id, nickname, birth, location, password, id);
-        } else {
-            // ID不存在，继续注册流程
-            user = std::make_unique<WeiBoUserLhy>(id, nickname, birth, location, password, id);
+        // 微博服务必须绑定到已存在的QQ账号
+        if (!ctx.users.count(id)) {
+            std::cout << "[提示] 该ID不存在，请先注册QQ账号" << std::endl;
+            return;
         }
+        
+        // 获取已存在的用户
+        auto& existingUser = ctx.users.at(id);
+        QQUserLhy* qqUserPtr = dynamic_cast<QQUserLhy*>(existingUser.get());
+        if (!qqUserPtr) {
+            std::cout << "[提示] 该ID不是QQ账号，无法注册微博服务" << std::endl;
+            return;
+        }
+        
+        // 使用QQ用户的信息创建微博用户（自动填充QQ用户的信息）
+        user = std::make_unique<WeiBoUserLhy>(id, qqUserPtr->getNickname(), qqUserPtr->getBirthDate(), 
+                                             qqUserPtr->getLocation(), password, id);
     } else {
         std::cout << "[提示] 不支持的用户类型" << std::endl;
         return;
@@ -809,13 +810,18 @@ int main() {
     while (running) {
         showMainMenu();
         int choice = 0;
-        std::cin >> choice;
-        if (std::cin.fail()) { 
-            std::cin.clear(); // 清除错误状态
-            clearLine(); 
+        
+        // 改进的输入处理逻辑，防止死循环
+        if (!(std::cin >> choice)) {
+            // 输入失败，清除错误状态和缓冲区
+            std::cin.clear();
+            std::cin.ignore((std::numeric_limits<std::streamsize>::max)(), '\n');
             std::cout << "[提示] 请输入有效数字选项" << std::endl;
-            continue; 
+            continue;
         }
+        
+        // 清除输入缓冲区中的剩余字符
+        std::cin.ignore((std::numeric_limits<std::streamsize>::max)(), '\n');
 
         switch (choice) {
         case 1:
