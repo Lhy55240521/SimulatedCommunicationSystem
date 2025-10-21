@@ -23,6 +23,8 @@ public:
     void enqueueOutgoingMessage(const std::string& peerId, const std::string& message);
     std::string dequeueIncomingMessage();
     void emulateIncomingMessage(const std::string& fromId, const std::string& message);
+    
+    QQGroupLhy* createGroup(const std::string& groupId, const std::string& groupName);
 };
 
 #endif // QQ_SERVICE_LHY_H

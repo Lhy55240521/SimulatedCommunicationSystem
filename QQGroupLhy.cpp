@@ -105,3 +105,45 @@ void QQGroupLhy::restoreTempSubGroups(const std::vector<std::string>& entries) {
 std::vector<std::string> QQGroupLhy::getAdminIds() const {
     return {adminIds.begin(), adminIds.end()};
 }
+
+bool QQGroupLhy::requestJoin(const std::string& userId, const std::string& message) {
+    if (isMember(userId)) {
+        std::cout << "[QQGroup] already a member" << std::endl;
+        return false;
+    }
+    joinRequests[userId] = message;
+    std::cout << "[QQGroup] join request from " << userId << " recorded" << std::endl;
+    return true;
+}
+
+bool QQGroupLhy::approveJoinRequest(const std::string& userId, const std::string& approverId, BaseUserLhy* applicant) {
+    if (approverId != getOwner()->getId() && !isAdmin(approverId)) {
+        std::cout << "[QQGroup] only owner or admins can approve requests" << std::endl;
+        return false;
+    }
+    auto it = joinRequests.find(userId);
+    if (it == joinRequests.end()) {
+        std::cout << "[QQGroup] no join request from " << userId << std::endl;
+        return false;
+    }
+    joinRequests.erase(it);
+    if (applicant && addMember(applicant)) {
+        std::cout << "[QQGroup] join request approved by " << approverId << std::endl;
+        return true;
+    }
+    return false;
+}
+
+bool QQGroupLhy::rejectJoinRequest(const std::string& userId, const std::string& rejectorId) {
+    if (rejectorId != getOwner()->getId() && !isAdmin(rejectorId)) {
+        std::cout << "[QQGroup] only owner or admins can reject requests" << std::endl;
+        return false;
+    }
+    auto erased = joinRequests.erase(userId);
+    if (erased > 0) {
+        std::cout << "[QQGroup] join request from " << userId << " rejected" << std::endl;
+        return true;
+    }
+    std::cout << "[QQGroup] no join request from " << userId << std::endl;
+    return false;
+}

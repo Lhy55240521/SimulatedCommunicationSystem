@@ -1,4 +1,5 @@
 #include "WeChatServiceLhy.h"
+#include "WeChatGroupLhy.h"
 
 #include <iostream>
 
@@ -21,4 +22,13 @@ bool WeChatServiceLhy::login(const std::string& credential) {
 
 void WeChatServiceLhy::updateRecommendations(const std::vector<std::string>& friends) {
     recommendedFriends = friends;
+}
+
+WeChatGroupLhy* WeChatServiceLhy::createGroup(const std::string& groupId, const std::string& groupName) {
+    if (!isLoggedIn()) {
+        std::cout << "[WeChat] please login first" << std::endl;
+        return nullptr;
+    }
+    std::cout << "[WeChat] creating group " << groupId << " (" << groupName << ")" << std::endl;
+    return new WeChatGroupLhy(groupId, groupName, getUser());
 }

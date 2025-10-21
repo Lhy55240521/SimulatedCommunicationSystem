@@ -30,6 +30,12 @@ namespace {
 struct PlatformContextLhy {
     std::unordered_map<std::string, std::unique_ptr<BaseUserLhy>> users;
     std::unordered_map<std::string, std::unique_ptr<BaseGroupLhy>> groups;
+    
+    // 实时保存数据
+    void autoSave() {
+        UserDataIOLhy::saveUsers("users_lhy.txt", users);
+        UserDataIOLhy::saveGroups("groups_lhy.txt", groups);
+    }
 };
 
 struct ActiveSessionLhy {
@@ -53,6 +59,38 @@ void clearLine() {
 BaseUserLhy* findUser(PlatformContextLhy& ctx, const std::string& id) {
     auto it = ctx.users.find(id);
     return it == ctx.users.end() ? nullptr : it->second.get();
+}
+
+// 根据当前服务类型查找用户(平台隔离)
+BaseUserLhy* findUserByService(PlatformContextLhy& ctx, const std::string& id, const std::string& serviceType) {
+    auto it = ctx.users.find(id);
+    if (it == ctx.users.end()) {
+        return nullptr;
+    }
+    
+    BaseUserLhy* user = it->second.get();
+    std::string normalizedService = normalizeService(serviceType);
+    
+    // QQ服务只能查询QQ用户
+    if (normalizedService == "QQ") {
+        if (dynamic_cast<QQUserLhy*>(user)) {
+            return user;
+        }
+        std::cout << "[提示] QQ服务只能查询QQ用户" << std::endl;
+        return nullptr;
+    }
+    
+    // WeChat服务只能查询WeChat用户
+    if (normalizedService == "WECHAT" || normalizedService == "WX") {
+        if (dynamic_cast<WeChatUserLhy*>(user)) {
+            return user;
+        }
+        std::cout << "[提示] 微信服务只能查询微信用户" << std::endl;
+        return nullptr;
+    }
+    
+    // 其他服务不限制
+    return user;
 }
 
 BaseGroupLhy* findGroup(PlatformContextLhy& ctx, const std::string& id) {
@@ -194,11 +232,14 @@ void manageFriends(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
         showFriendMenu();
         int choice = 0;
         std::cin >> choice;
-        if (std::cin.fail()) { 
-            std::cin.clear(); // 清除错误状态
-            clearLine(); 
+        if (std::cin.fail()) {
+            if (std::cin.eof()) {
+                return; // EOF时退出循环
+            }
+            std::cin.clear();
+            clearLine();
             std::cout << "[提示] 请输入有效数字选项" << std::endl;
-            continue; 
+            continue;
         }
         if (choice == 0) {
             return;
@@ -223,13 +264,16 @@ void manageFriends(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
             std::string target;
             std::cout << "输入好友ID：";
             std::cin >> target;
-            auto* other = findUser(ctx, target);
+            
+            // 使用平台隔离的查找函数
+            auto* other = findUserByService(ctx, target, session.activeService->getServiceType());
             if (!other) {
-                std::cout << "[提示] 用户不存在" << std::endl;
+                std::cout << "[提示] 用户不存在或不在当前服务平台" << std::endl;
                 break;
             }
             if (user->addFriend(target)) {
                 other->addFriend(user->getId());
+                ctx.autoSave(); // 实时保存
                 std::cout << "[成功] 已互为好友" << std::endl;
             } else {
                 std::cout << "[提示] 已经是好友" << std::endl;
@@ -244,6 +288,7 @@ void manageFriends(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
                 if (auto* other = findUser(ctx, target)) {
                     other->removeFriend(user->getId());
                 }
+                ctx.autoSave(); // 实时保存
                 std::cout << "[成功] 好友已删除" << std::endl;
             } else {
                 std::cout << "[提示] 非好友" << std::endl;
@@ -258,6 +303,7 @@ void manageFriends(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
             clearLine();
             std::getline(std::cin, remark);
             user->setFriendRemark(target, remark);
+            ctx.autoSave(); // 实时保存
             std::cout << "[成功] 备注已更新" << std::endl;
             break;
         }
@@ -289,19 +335,22 @@ void manageFriends(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
 void showGroupMenu(const std::string& serviceType) {
     std::cout << "\n----- 群组管理 -----" << std::endl;
     std::cout << "1. 查看全部群" << std::endl;
-    std::cout << "2. 加入群" << std::endl;
-    std::cout << "3. 退出群" << std::endl;
-    std::cout << "4. 挨T成员" << std::endl;
+    std::cout << "2. 创建新群" << std::endl;
+    std::cout << "3. 加入群" << std::endl;
+    std::cout << "4. 退出群" << std::endl;
+    std::cout << "5. 移除成员" << std::endl;
     
     // 根据当前服务类型显示相应的特有功能
     if (serviceType == "QQ") {
-        std::cout << "5. 创建QQ临时讨论组" << std::endl;
-        std::cout << "6. 解散QQ临时讨论组" << std::endl;
+        std::cout << "6. QQ群管理员设置" << std::endl;
+        std::cout << "7. 处理加群申请" << std::endl;
+        std::cout << "8. 创建临时讨论组" << std::endl;
+        std::cout << "9. 解散临时讨论组" << std::endl;
     } else if (serviceType == "WECHAT") {
-        std::cout << "5. 设置微信群公告" << std::endl;
+        std::cout << "6. 邀请成员入群" << std::endl;
+        std::cout << "7. 设置群公告" << std::endl;
     }
     
-    std::cout << "7. 切换群类型" << std::endl;
     std::cout << "0. 返回" << std::endl;
     std::cout << "请选择：";
 }
@@ -343,11 +392,14 @@ void manageGroups(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
         showGroupMenu(currentServiceType);
         int choice = 0;
         std::cin >> choice;
-        if (std::cin.fail()) { 
-            std::cin.clear(); // 清除错误状态
-            clearLine(); 
+        if (std::cin.fail()) {
+            if (std::cin.eof()) {
+                return; // EOF时退出循环
+            }
+            std::cin.clear();
+            clearLine();
             std::cout << "[提示] 请输入有效数字选项" << std::endl;
-            continue; 
+            continue;
         }
         if (choice == 0) {
             return;
@@ -365,6 +417,47 @@ void manageGroups(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
             break;
         }
         case 2: {
+            // 创建新群
+            std::string id, name;
+            std::cout << "输入新群ID：";
+            std::cin >> id;
+            if (ctx.groups.count(id)) {
+                std::cout << "[提示] 群ID已存在" << std::endl;
+                break;
+            }
+            std::cout << "输入群名称：";
+            clearLine();
+            std::getline(std::cin, name);
+            
+            std::unique_ptr<BaseGroupLhy> newGroup;
+            if (currentServiceType == "QQ") {
+                auto it = session.services.find("QQ");
+                if (it != session.services.end()) {
+                    auto* qqService = dynamic_cast<QQServiceLhy*>(it->second.get());
+                    if (qqService) {
+                        newGroup.reset(qqService->createGroup(id, name));
+                    }
+                }
+            } else if (currentServiceType == "WECHAT") {
+                auto it = session.services.find("WECHAT");
+                if (it != session.services.end()) {
+                    auto* wxService = dynamic_cast<WeChatServiceLhy*>(it->second.get());
+                    if (wxService) {
+                        newGroup.reset(wxService->createGroup(id, name));
+                    }
+                }
+            }
+            
+            if (newGroup) {
+                ctx.groups[id] = std::move(newGroup);
+                ctx.autoSave(); // 实时保存
+                std::cout << "[成功] 群创建成功" << std::endl;
+            } else {
+                std::cout << "[提示] 群创建失败" << std::endl;
+            }
+            break;
+        }
+        case 3: {
             std::string id;
             std::cout << "输入要加入的群ID：";
             std::cin >> id;
@@ -373,14 +466,23 @@ void manageGroups(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
                 std::cout << "[提示] 群不存在" << std::endl;
                 break;
             }
-            if (group->addMember(session.user)) {
-                std::cout << "[成功] 已加入群" << std::endl;
+            
+            // QQ群需要申请加入
+            if (auto* qqGroup = dynamic_cast<QQGroupLhy*>(group)) {
+                std::string message;
+                std::cout << "输入加群申请信息：";
+                clearLine();
+                std::getline(std::cin, message);
+                qqGroup->requestJoin(session.user->getId(), message);
+                ctx.autoSave(); // 实时保存
+                std::cout << "[成功] 已提交加群申请，等待管理员审核" << std::endl;
             } else {
-                std::cout << "[提示] 加入失败" << std::endl;
+                // 微信群只能通过邀请加入
+                std::cout << "[提示] 微信群需要群成员邀请才能加入" << std::endl;
             }
             break;
         }
-        case 3: {
+        case 4: {
             std::string id;
             std::cout << "输入要退出的群ID：";
             std::cin >> id;
@@ -390,13 +492,14 @@ void manageGroups(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
                 break;
             }
             if (group->removeMember(session.user->getId(), session.user->getId())) {
+                ctx.autoSave(); // 实时保存
                 std::cout << "[成功] 已退出群" << std::endl;
             } else {
                 std::cout << "[提示] 无法退出，可能是群主" << std::endl;
             }
             break;
         }
-        case 4: {
+        case 5: {
             std::string id, target;
             std::cout << "输入群ID：";
             std::cin >> id;
@@ -405,14 +508,114 @@ void manageGroups(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
             std::cout << "输入要移除的成员ID：";
             std::cin >> target;
             if (group->removeMember(target, session.user->getId())) {
+                ctx.autoSave(); // 实时保存
                 std::cout << "[成功] 已移除成员" << std::endl;
             } else {
                 std::cout << "[提示] 无权限或成员不存在" << std::endl;
             }
             break;
         }
-        case 5: {
-            // 根据当前服务类型处理不同的功能
+        case 6: {
+            if (currentServiceType == "QQ") {
+                // QQ群管理员设置
+                std::string id, targetId;
+                int adminChoice;
+                std::cout << "输入QQ群ID：";
+                std::cin >> id;
+                auto* qqGroup = dynamic_cast<QQGroupLhy*>(findGroup(ctx, id));
+                if (!qqGroup) { std::cout << "[提示] 不是QQ群" << std::endl; break; }
+                if (qqGroup->getOwner()->getId() != session.user->getId()) {
+                    std::cout << "[提示] 只有群主可以设置管理员" << std::endl;
+                    break;
+                }
+                std::cout << "1-添加管理员 2-移除管理员：";
+                std::cin >> adminChoice;
+                std::cout << "输入用户ID：";
+                std::cin >> targetId;
+                if (adminChoice == 1) {
+                    qqGroup->addAdmin(targetId);
+                    ctx.autoSave(); // 实时保存
+                } else if (adminChoice == 2) {
+                    qqGroup->removeAdmin(targetId);
+                    ctx.autoSave(); // 实时保存
+                }
+            } else if (currentServiceType == "WECHAT") {
+                // 微信群邀请成员
+                std::string id, targetId;
+                std::cout << "输入微信群ID：";
+                std::cin >> id;
+                auto* wxGroup = dynamic_cast<WeChatGroupLhy*>(findGroup(ctx, id));
+                if (!wxGroup) { std::cout << "[提示] 不是微信群" << std::endl; break; }
+                std::cout << "输入要邀请的用户ID：";
+                std::cin >> targetId;
+                
+                // 使用平台隔离的查找
+                auto* target = findUserByService(ctx, targetId, "WECHAT");
+                if (!target) {
+                    std::cout << "[提示] 用户不存在或不是微信用户" << std::endl;
+                    break;
+                }
+                wxGroup->inviteMember(session.user, target);
+                ctx.autoSave(); // 实时保存
+            }
+            break;
+        }
+        case 7: {
+            if (currentServiceType == "QQ") {
+                // 处理加群申请
+                std::string id;
+                std::cout << "输入QQ群ID：";
+                std::cin >> id;
+                auto* qqGroup = dynamic_cast<QQGroupLhy*>(findGroup(ctx, id));
+                if (!qqGroup) { std::cout << "[提示] 不是QQ群" << std::endl; break; }
+                
+                auto requests = qqGroup->getJoinRequests();
+                if (requests.empty()) {
+                    std::cout << "[提示] 暂无加群申请" << std::endl;
+                    break;
+                }
+                
+                std::cout << "\n[加群申请列表]" << std::endl;
+                for (const auto& req : requests) {
+                    std::cout << "  用户: " << req.first << " 申请信息: " << req.second << std::endl;
+                }
+                
+                std::string userId;
+                int decision;
+                std::cout << "输入要处理的用户ID：";
+                std::cin >> userId;
+                std::cout << "1-同意 2-拒绝：";
+                std::cin >> decision;
+                
+                if (decision == 1) {
+                    auto* applicant = findUser(ctx, userId);
+                    qqGroup->approveJoinRequest(userId, session.user->getId(), applicant);
+                    ctx.autoSave(); // 实时保存
+                } else if (decision == 2) {
+                    qqGroup->rejectJoinRequest(userId, session.user->getId());
+                    ctx.autoSave(); // 实时保存
+                }
+            } else if (currentServiceType == "WECHAT") {
+                // 设置微信群公告
+                std::string id;
+                std::cout << "输入微信群ID：";
+                std::cin >> id;
+                auto* wxGroup = dynamic_cast<WeChatGroupLhy*>(findGroup(ctx, id));
+                if (!wxGroup) { std::cout << "[提示] 不是微信群" << std::endl; break; }
+                if (wxGroup->getOwner()->getId() != session.user->getId()) {
+                    std::cout << "[提示] 只有群主可设置公告" << std::endl;
+                    break;
+                }
+                std::string announcement;
+                std::cout << "输入公告内容：";
+                clearLine();
+                std::getline(std::cin, announcement);
+                wxGroup->setAnnouncement(announcement);
+                ctx.autoSave(); // 实时保存
+            }
+            break;
+        }
+        case 8: {
             if (currentServiceType == "QQ") {
                 // 创建QQ临时讨论组
                 std::string id, name;
@@ -421,32 +624,15 @@ void manageGroups(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
                 auto* group = dynamic_cast<QQGroupLhy*>(findGroup(ctx, id));
                 if (!group) { std::cout << "[提示] 不是QQ群" << std::endl; break; }
                 std::cout << "输入临时讨论组名称：";
-                std::cin >> name;
-                group->createTempSubGroup(name, session.user);
-            } else if (currentServiceType == "WECHAT") {
-                // 设置微信群公告
-                std::string id;
-                std::cout << "输入微信群ID：";
-                std::cin >> id;
-                auto* group = dynamic_cast<WeChatGroupLhy*>(findGroup(ctx, id));
-                if (!group) { std::cout << "[提示] 不是微信群" << std::endl; break; }
-                if (group->getOwner()->getId() != session.user->getId()) {
-                    std::cout << "[提示] 只有群主可设置公告" << std::endl;
-                    break;
-                }
-                std::string announcement;
-                std::cout << "输入公告内容：";
                 clearLine();
-                std::getline(std::cin, announcement);
-                group->setAnnouncement(announcement);
-            } else {
-                std::cout << "[提示] 当前服务不支持此功能" << std::endl;
+                std::getline(std::cin, name);
+                group->createTempSubGroup(name, session.user);
             }
             break;
         }
-        case 6: {
-            // 解散QQ临时讨论组（仅QQ服务）
+        case 9: {
             if (currentServiceType == "QQ") {
+                // 解散QQ临时讨论组
                 std::string id, tempId;
                 std::cout << "输入QQ群ID：";
                 std::cin >> id;
@@ -455,18 +641,7 @@ void manageGroups(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
                 std::cout << "输入临时讨论组ID（如1001_temp_1）：";
                 std::cin >> tempId;
                 group->dissolveTempSubGroup(tempId);
-            } else {
-                std::cout << "[提示] 当前服务不支持此功能" << std::endl;
             }
-            break;
-        }
-        case 7: {
-            std::string id, type;
-            std::cout << "输入群ID：";
-            std::cin >> id;
-            std::cout << "转换为类型(QQ/WECHAT)：";
-            std::cin >> type;
-            convertGroup(ctx, id, type);
             break;
         }
         default:
@@ -481,20 +656,24 @@ void showServiceMenu() {
     std::cout << "1. 查看服务状态" << std::endl;
     std::cout << "2. 开通新服务" << std::endl;
     std::cout << "3. 切换活动服务" << std::endl;
+    std::cout << "4. QQ-微信账号绑定" << std::endl;
     std::cout << "0. 返回" << std::endl;
     std::cout << "请选择：";
 }
 
-void manageServices(ActiveSessionLhy& session) {
+void manageServices(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
     while (true) {
         showServiceMenu();
         int choice = 0;
         std::cin >> choice;
-        if (std::cin.fail()) { 
-            std::cin.clear(); // 清除错误状态
-            clearLine(); 
+        if (std::cin.fail()) {
+            if (std::cin.eof()) {
+                return; // EOF时退出循环
+            }
+            std::cin.clear();
+            clearLine();
             std::cout << "[提示] 请输入有效数字选项" << std::endl;
-            continue; 
+            continue;
         }
         if (choice == 0) {
             return;
@@ -536,6 +715,7 @@ void manageServices(ActiveSessionLhy& session) {
             session.user->openService(type);
             session.activeService = service.get();
             session.services.emplace(type, std::move(service));
+            ctx.autoSave(); // 实时保存
             std::cout << "[成功] 服务已开通并登录" << std::endl;
             break;
         }
@@ -551,6 +731,100 @@ void manageServices(ActiveSessionLhy& session) {
             }
             session.activeService = it->second.get();
             std::cout << "[成功] 已切换到 " << type << " 服务" << std::endl;
+            break;
+        }
+        case 4: {
+            // QQ-微信账号绑定
+            std::cout << "\n----- 账号绑定 -----" << std::endl;
+            if (auto* qqUser = dynamic_cast<QQUserLhy*>(session.user)) {
+                // 当前用户是QQ用户
+                std::string currentBind = qqUser->getBindWeChatId();
+                if (!currentBind.empty()) {
+                    std::cout << "当前已绑定微信: " << currentBind << std::endl;
+                    std::cout << "1-更换绑定 2-取消绑定 0-返回：";
+                    int bindChoice;
+                    std::cin >> bindChoice;
+                    if (bindChoice == 1) {
+                        std::string newId;
+                        std::cout << "输入新的微信ID：";
+                        std::cin >> newId;
+                        auto* target = dynamic_cast<WeChatUserLhy*>(findUser(ctx, newId));
+                        if (!target) {
+                            std::cout << "[提示] 微信用户不存在" << std::endl;
+                            break;
+                        }
+                        qqUser->bindWithWeChat(newId);
+                        target->bindWithQQ(qqUser->getId());
+                        ctx.autoSave(); // 实时保存
+                    } else if (bindChoice == 2) {
+                        qqUser->setBindWeChatId("");
+                        ctx.autoSave(); // 实时保存
+                        std::cout << "[成功] 已取消绑定" << std::endl;
+                    }
+                } else {
+                    std::cout << "当前未绑定微信账号" << std::endl;
+                    std::string wxId;
+                    std::cout << "输入要绑定的微信ID（0取消）：";
+                    std::cin >> wxId;
+                    if (wxId != "0") {
+                        auto* target = dynamic_cast<WeChatUserLhy*>(findUser(ctx, wxId));
+                        if (!target) {
+                            std::cout << "[提示] 微信用户不存在" << std::endl;
+                            break;
+                        }
+                        if (qqUser->bindWithWeChat(wxId)) {
+                            target->bindWithQQ(qqUser->getId());
+                            ctx.autoSave(); // 实时保存
+                            // 更新推荐好友
+                            refreshRecommendations(ctx, session);
+                        }
+                    }
+                }
+            } else if (auto* wxUser = dynamic_cast<WeChatUserLhy*>(session.user)) {
+                // 当前用户是微信用户
+                std::string currentBind = wxUser->getBindQQId();
+                if (!currentBind.empty()) {
+                    std::cout << "当前已绑定QQ: " << currentBind << std::endl;
+                    std::cout << "1-更换绑定 2-取消绑定 0-返回：";
+                    int bindChoice;
+                    std::cin >> bindChoice;
+                    if (bindChoice == 1) {
+                        std::string newId;
+                        std::cout << "输入新的QQ ID：";
+                        std::cin >> newId;
+                        auto* target = dynamic_cast<QQUserLhy*>(findUser(ctx, newId));
+                        if (!target) {
+                            std::cout << "[提示] QQ用户不存在" << std::endl;
+                            break;
+                        }
+                        wxUser->bindWithQQ(newId);
+                        target->bindWithWeChat(wxUser->getId());
+                        ctx.autoSave(); // 实时保存
+                    } else if (bindChoice == 2) {
+                        wxUser->setBindQQId("");
+                        ctx.autoSave(); // 实时保存
+                        std::cout << "[成功] 已取消绑定" << std::endl;
+                    }
+                } else {
+                    std::cout << "当前未绑定QQ账号" << std::endl;
+                    std::string qqId;
+                    std::cout << "输入要绑定的QQ ID（0取消）：";
+                    std::cin >> qqId;
+                    if (qqId != "0") {
+                        auto* target = dynamic_cast<QQUserLhy*>(findUser(ctx, qqId));
+                        if (!target) {
+                            std::cout << "[提示] QQ用户不存在" << std::endl;
+                            break;
+                        }
+                        if (wxUser->bindWithQQ(qqId)) {
+                            target->bindWithWeChat(wxUser->getId());
+                            ctx.autoSave(); // 实时保存
+                            // 更新推荐好友
+                            refreshRecommendations(ctx, session);
+                        }
+                    }
+                }
+            }
             break;
         }
         default:
@@ -582,11 +856,14 @@ void simulateQQChat(ActiveSessionLhy& session) {
 
         int choice = 0;
         std::cin >> choice;
-        if (std::cin.fail()) { 
-            std::cin.clear(); // 清除错误状态
-            clearLine(); 
+        if (std::cin.fail()) {
+            if (std::cin.eof()) {
+                return; // EOF时退出循环
+            }
+            std::cin.clear();
+            clearLine();
             std::cout << "[提示] 请输入有效数字选项" << std::endl;
-            continue; 
+            continue;
         }
         
         if (choice == 0) {
@@ -642,11 +919,15 @@ void sessionLoop(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
 
         int choice = 0;
         std::cin >> choice;
-        if (std::cin.fail()) { 
-            std::cin.clear(); // 清除错误状态
-            clearLine(); 
+        if (std::cin.fail()) {
+            if (std::cin.eof()) {
+                running = false; // EOF时退出会话
+                break;
+            }
+            std::cin.clear();
+            clearLine();
             std::cout << "[提示] 请输入有效数字选项" << std::endl;
-            continue; 
+            continue;
         }
 
         switch (choice) {
@@ -657,7 +938,7 @@ void sessionLoop(PlatformContextLhy& ctx, ActiveSessionLhy& session) {
             manageGroups(ctx, session);
             break;
         case 3:
-            manageServices(session);
+            manageServices(ctx, session);
             break;
         case 4:
             printUserSummary(session.user);
@@ -725,6 +1006,7 @@ void registerUser(PlatformContextLhy& ctx, const std::string& type) {
         existingUser->openService("WEIBO");
         // 设置微博服务特定密码
         existingUser->setServicePassword("WEIBO", password);
+        ctx.autoSave(); // 实时保存
         std::cout << "[成功] 微博服务注册完成" << std::endl;
         
     } else {
@@ -797,6 +1079,7 @@ void registerUser(PlatformContextLhy& ctx, const std::string& type) {
         }
         user->openService(normalized);
         ctx.users.emplace(id, std::move(user));
+        ctx.autoSave(); // 实时保存
         std::cout << "[成功] 注册完成" << std::endl;
     }
 }
@@ -882,15 +1165,21 @@ int main() {
         
         // 改进的输入处理逻辑，防止死循环
         if (!(std::cin >> choice)) {
+            // 检查是否遇到EOF
+            if (std::cin.eof()) {
+                std::cout << "\n[系统] 检测到输入结束，退出程序" << std::endl;
+                running = false;
+                break;
+            }
             // 输入失败，清除错误状态和缓冲区
             std::cin.clear();
-            std::cin.ignore((std::numeric_limits<std::streamsize>::max)(), '\n');
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::cout << "[提示] 请输入有效数字选项" << std::endl;
             continue;
         }
         
         // 清除输入缓冲区中的剩余字符
-        std::cin.ignore((std::numeric_limits<std::streamsize>::max)(), '\n');
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
         switch (choice) {
         case 1:
