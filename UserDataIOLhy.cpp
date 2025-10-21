@@ -4,6 +4,7 @@
 #include "QQUserLhy.h"
 #include "WeChatGroupLhy.h"
 #include "WeChatUserLhy.h"
+#include "WeiBoUserLhy.h"
 
 #include <fstream>
 #include <iostream>
@@ -50,7 +51,7 @@ void UserDataIOLhy::loadUsers(const std::string& filename,
             continue;
         }
         auto fields = split(line, '|');
-        if (fields.size() < 8 || (fields[0] != "QQ" && fields[0] != "WECHAT")) {
+        if (fields.size() < 8 || (fields[0] != "QQ" && fields[0] != "WECHAT" && fields[0] != "WEIBO")) {
             continue;
         }
 
@@ -65,9 +66,11 @@ void UserDataIOLhy::loadUsers(const std::string& filename,
 
         std::unique_ptr<BaseUserLhy> user;
         if (type == "QQ") {
-            user = std::make_unique<QQUserLhy>(id, nickname, birth, tAge, location, password, bindId);
+            user = std::make_unique<QQUserLhy>(id, nickname, birth, location, password, bindId);
         } else if (type == "WECHAT") {
-            user = std::make_unique<WeChatUserLhy>(id, nickname, birth, tAge, location, password, bindId);
+            user = std::make_unique<WeChatUserLhy>(id, nickname, birth, location, password, bindId);
+        } else if (type == "WEIBO") {
+            user = std::make_unique<WeiBoUserLhy>(id, nickname, birth, location, password, bindId);
         } else {
             continue;
         }
@@ -124,6 +127,9 @@ void UserDataIOLhy::saveUsers(const std::string& filename,
         } else if (const auto* wx = dynamic_cast<const WeChatUserLhy*>(user)) {
             type = "WECHAT";
             bindId = wx->getBindQQId();
+        } else if (const auto* wb = dynamic_cast<const WeiBoUserLhy*>(user)) {
+            type = "WEIBO";
+            bindId = wb->getBindQQId();
         }
 
         std::vector<std::string> services = user->getOpenedServices();
@@ -141,7 +147,7 @@ void UserDataIOLhy::saveUsers(const std::string& filename,
              << user->getNickname() << '|'
              << user->getPassword() << '|'
              << user->getBirthDate() << '|'
-             << user->getTAge() << '|'
+             << user->getAccountCreationTime() << '|'
              << user->getLocation() << '|'
              << bindId << '|'
              << join(services, ',') << '|'

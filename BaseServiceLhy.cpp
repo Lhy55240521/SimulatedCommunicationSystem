@@ -1,6 +1,7 @@
 #include "BaseServiceLhy.h"
 #include "QQServiceLhy.h"
 #include "WeChatServiceLhy.h"
+#include "WeiBoServiceLhy.h"
 
 #include <algorithm>
 #include <cctype>
@@ -80,6 +81,9 @@ std::unique_ptr<BaseServiceLhy> BaseServiceLhy::create(const std::string& rawTyp
     }
     if (normalized == "WECHAT" || normalized == "WX") {
         return std::unique_ptr<BaseServiceLhy>(new WeChatServiceLhy(user));
+    }
+    if (normalized == "WEIBO") {
+        return std::unique_ptr<BaseServiceLhy>(new WeiBoServiceLhy(user));
     }
     std::cout << "[Factory] Unsupported service type: " << rawType << std::endl;
     return nullptr;

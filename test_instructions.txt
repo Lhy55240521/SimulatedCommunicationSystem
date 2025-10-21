@@ -1,0 +1,39 @@
+微博服务功能测试说明
+==================
+
+1. 编译项目:
+   g++ -std=c++17 *.cpp -o SimulatedCommunicationSystem.exe
+
+2. 运行程序:
+   ./SimulatedCommunicationSystem.exe
+
+3. 测试步骤:
+
+   a. 注册QQ账号:
+      - 选择选项3 (注册QQ账号)
+      - 输入以下信息:
+        * ID: test_qq_user
+        * 昵称: TestQQUser
+        * 生日: 1990-01-01
+        * 地区: Beijing
+        * 密码: qq_password
+
+   b. 注册微博账号:
+      - 选择选项5 (注册微博账号)
+      - 输入ID: test_qq_user (必须与已注册的QQ账号ID相同)
+      - 系统会自动填充其他信息
+      - 输入微博密码: weibo_password
+
+   c. 登录微博服务:
+      - 选择选项6 (微博服务登录)
+      - 输入ID: test_qq_user
+      - 输入密码: weibo_password
+      - 验证是否成功登录并显示微博热门话题
+
+4. 预期结果:
+   - 程序能够成功编译和运行
+   - 主菜单正确显示微博服务选项
+   - QQ账号注册功能正常
+   - 微博账号注册功能正常（与QQ共享ID）
+   - 微博服务登录功能正常
+   - 成功显示微博热门话题
