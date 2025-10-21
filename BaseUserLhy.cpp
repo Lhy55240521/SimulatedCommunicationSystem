@@ -1,19 +1,28 @@
 #include "BaseUserLhy.h"
 
 #include <algorithm>
+#include <chrono>
+#include <ctime>
+#include <sstream>
+#include <iomanip>
 
 BaseUserLhy::BaseUserLhy(const std::string& id,
                          const std::string& nickname,
                          const std::string& birthDate,
-                         int tAge,
                          const std::string& location,
                          const std::string& password)
     : id(id),
       nickname(nickname),
       birthDate(birthDate),
-      tAge(tAge),
       location(location),
-      password(password) {}
+      password(password) {
+    // 获取当前时间作为账户创建时间
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S");
+    accountCreationTime = ss.str();
+}
 
 std::vector<std::string> BaseUserLhy::getFriendIds() const {
     return {friendIds.begin(), friendIds.end()};

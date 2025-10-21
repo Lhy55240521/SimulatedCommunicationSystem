@@ -20,13 +20,15 @@ protected:
     explicit BaseServiceLhy(BaseUserLhy* user, const std::string& serviceType);
 
     void finishLogin();
+    
+    // 获取用户指针
+    BaseUserLhy* getUser() const { return user; }
     void setLoggedIn(bool value) { loggedIn = value; }
 
 public:
     virtual ~BaseServiceLhy();
 
     const std::string& getServiceType() const { return serviceType; }
-    BaseUserLhy* getUser() const { return user; }
     bool isLoggedIn() const { return loggedIn; }
 
     virtual bool login(const std::string& credential) = 0;

@@ -12,7 +12,6 @@ public:
     WeChatUserLhy(const std::string& id,
                   const std::string& nickname,
                   const std::string& birthDate,
-                  int tAge,
                   const std::string& location,
                   const std::string& password = "6666",
                   const std::string& bindQQId = "");
@@ -20,5 +19,4 @@ public:
     void setBindQQId(const std::string& qqId);
     const std::string& getBindQQId() const { return bindQQId; }
 };
-
 #endif // WECHAT_USER_LHY_H
