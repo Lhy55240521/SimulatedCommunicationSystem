@@ -21,6 +21,9 @@ public:
     void setAnnouncement(const std::string& message);
     const std::string& getAnnouncement() const { return announcement; }
     size_t getMaxMembers() const { return maxMembers; }
+    
+    // 微信群通过已有成员邀请加入
+    bool inviteMember(BaseUserLhy* inviter, BaseUserLhy* newMember);
 };
 
 #endif // WECHAT_GROUP_LHY_H

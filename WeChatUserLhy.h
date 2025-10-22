@@ -18,5 +18,6 @@ public:
 
     void setBindQQId(const std::string& qqId);
     const std::string& getBindQQId() const { return bindQQId; }
+    bool bindWithQQ(const std::string& qqId);
 };
 #endif // WECHAT_USER_LHY_H

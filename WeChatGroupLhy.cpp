@@ -51,3 +51,26 @@ void WeChatGroupLhy::setAnnouncement(const std::string& message) {
     announcement = message;
     std::cout << "[WeChatGroup] announcement updated" << std::endl;
 }
+
+bool WeChatGroupLhy::inviteMember(BaseUserLhy* inviter, BaseUserLhy* newMember) {
+    if (!inviter || !newMember) {
+        return false;
+    }
+    if (!isMember(inviter->getId())) {
+        std::cout << "[WeChatGroup] inviter must be a member" << std::endl;
+        return false;
+    }
+    if (isMember(newMember->getId())) {
+        std::cout << "[WeChatGroup] already a member" << std::endl;
+        return false;
+    }
+    if (memberCount() >= maxMembers) {
+        std::cout << "[WeChatGroup] member capacity reached" << std::endl;
+        return false;
+    }
+    if (addMemberRecord(newMember)) {
+        std::cout << "[WeChatGroup] " << newMember->getId() << " invited by " << inviter->getId() << std::endl;
+        return true;
+    }
+    return false;
+}

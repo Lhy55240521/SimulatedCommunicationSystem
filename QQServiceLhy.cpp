@@ -1,4 +1,5 @@
 #include "QQServiceLhy.h"
+#include "QQGroupLhy.h"
 
 #include <iostream>
 
@@ -45,4 +46,13 @@ std::string QQServiceLhy::dequeueIncomingMessage() {
 
 void QQServiceLhy::emulateIncomingMessage(const std::string& fromId, const std::string& message) {
     tcpInbox.emplace_back("From " + fromId + ": " + message);
+}
+
+QQGroupLhy* QQServiceLhy::createGroup(const std::string& groupId, const std::string& groupName) {
+    if (!isLoggedIn()) {
+        std::cout << "[QQ] please login first" << std::endl;
+        return nullptr;
+    }
+    std::cout << "[QQ] creating group " << groupId << " (" << groupName << ")" << std::endl;
+    return new QQGroupLhy(groupId, groupName, getUser());
 }

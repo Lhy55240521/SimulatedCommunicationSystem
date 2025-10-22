@@ -18,6 +18,7 @@ public:
 
     void setBindWeChatId(const std::string& wechatId);
     const std::string& getBindWeChatId() const { return bindWeChatId; }
+    bool bindWithWeChat(const std::string& wechatId);
 };
 
 #endif // QQ_USER_LHY_H
